@@ -127,7 +127,7 @@ var META=[{"id": "exam", "label": "Exam tips and format", "cat": "Start here", "
 var byId={}; META.forEach(function(m){byId[m.id]=m;});
 var read={}; try{read=JSON.parse(localStorage.getItem('dva_read')||'{}')||{};}catch(e){}
 var tgw=(window.Telegram&&window.Telegram.WebApp)||null, CS=(tgw&&tgw.initData&&tgw.CloudStorage)?tgw.CloudStorage:null;
-function save(){try{localStorage.setItem('dva_read',JSON.stringify(read));}catch(e){} if(CS){CS.setItem('read',JSON.stringify(read),function(){});}}
+function save(){try{localStorage.setItem('dva_read',JSON.stringify(read));}catch(e){} if(CS){CS.setItem('read_aws',JSON.stringify(read),function(){});}}
 var $=function(s,r){return (r||document).querySelector(s);}, $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s));};
 var order=META.map(function(m){return m.id;});
 
@@ -202,7 +202,7 @@ $('#themeBtn').addEventListener('click',function(){var d=document.documentElemen
 window.addEventListener('hashchange',function(){q.value='';route();});
 renderHome(); updateRead(); route();
 if(tgw){try{tgw.ready();tgw.expand();}catch(e){}}
-if(CS){CS.getItem('read',function(err,v){if(err||!v)return;try{var c=JSON.parse(v);Object.keys(c).forEach(function(k){if(c[k])read[k]=true;});save();updateRead();}catch(e){}});}
+if(CS){CS.getItem('read_aws',function(err,v){if(err||!v)return;try{var c=JSON.parse(v);Object.keys(c).forEach(function(k){if(c[k])read[k]=true;});save();updateRead();}catch(e){}});}
 })();
 </script>
 
