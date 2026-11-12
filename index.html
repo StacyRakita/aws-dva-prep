@@ -34,6 +34,7 @@ main{max-width:720px;margin:0 auto;padding:16px 16px 24px}
 .tag{font:600 10px 'JetBrains Mono';text-transform:uppercase;letter-spacing:.05em;padding:3px 8px;border-radius:6px;background:var(--surface2);color:var(--muted)}
 .tag.ok{background:var(--ok-bg);color:var(--ok)}.tag.bad{background:var(--bad-bg);color:var(--bad)}
 .q{font-size:16px;font-weight:500;line-height:1.55;margin:10px 0 14px}
+pre.codeblk{background:var(--code);border:1px solid var(--line,#2a2f3a);border-radius:10px;padding:10px 12px;margin:10px 0;overflow-x:auto;font:12px/1.5 'JetBrains Mono',monospace;white-space:pre}pre.codeblk code{background:none;padding:0;word-break:normal}
 code{background:var(--code);padding:1px 6px;border-radius:5px;font:12.5px 'JetBrains Mono',monospace;word-break:break-word}
 .opt{display:flex;gap:10px;width:100%;text-align:left;border:1px solid var(--border);background:var(--surface2);border-radius:11px;padding:12px 14px;margin-bottom:8px;line-height:1.4}
 .opt .k{font:700 13px 'JetBrains Mono';color:var(--muted);flex:none}
@@ -81,7 +82,7 @@ var main = $("#main");
 
 // ---------- helpers
 function esc(s){ return String(s).replace(/[&<>"]/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
-function fmt(s){ return esc(s).replace(/`([^`]+)`/g,"<code>$1</code>"); }
+function fmt(s){ var a=String(s).split(/```(?:\w+)?\n?([\s\S]*?)```/); return a.map(function(p,i){ return i%2 ? '<pre class="codeblk"><code>'+esc(p.replace(/\n$/,""))+'</code></pre>' : esc(a.length>1?p.replace(i>0?/^\n/:/$^/,"").replace(i<a.length-1?/\n$/:/$^/,""):p).replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\n/g,"<br>"); }).join(""); }
 function rich(s){ if((s.match(/<b>/g)||[]).length!==(s.match(/<\/b>/g)||[]).length) s=s.replace(/<\/?b>/g,""); return s.split(/(<\/?b>)/).map(function(p){ return (p==="<b>"||p==="</b>")?p:fmt(p); }).join(""); }
 function shuffle(a){ a=a.slice(); for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
 function today(){ var d=new Date(); return Math.floor((d.getTime()-d.getTimezoneOffset()*60000)/DAY); }
@@ -223,7 +224,8 @@ function sessionFor(idx){
   return items;
 }
 function describe(items){ var c={q:0,c:0,o:0,m:0,s:0}; items.forEach(function(i){ c[i.t]++; }); var out=[]; if(c.q) out.push(plural(c.q,"question")); if(c.c) out.push(plural(c.c,"card")); if(c.o+c.m) out.push(plural(c.o+c.m,"drill")); if(c.s) out.push(plural(c.s,"scenario")); return out.join(", "); }
-function guideLink(g){ return '<a class="btn small" href="guide.html#'+esc(g)+'">'+esc(D.GROUPS[g]||g)+'</a>'; }
+function guideLink(g){ var l=D.GL&&D.GL[g]; if(l) return '<a class="btn small" href="guide.html?from=app#/l/'+esc(l[0])+'">'+esc(l[1])+'</a>'; return '<a class="btn small" href="guide.html?from=app#'+esc(g)+'">'+esc(D.GROUPS[g]||g)+'</a>'; }
+function guideLinks(gs){ var seen={}, o=[]; gs.forEach(function(g){ var l=D.GL&&D.GL[g], k=l?l[0]:g; if(!seen[k]){ seen[k]=1; o.push(g); } }); return o.map(guideLink).join(""); }
 
 function renderHome(){
   title("Today"); chipStreak();
@@ -236,7 +238,7 @@ function renderHome(){
   h+='<div class="row" style="margin-top:10px"><button class="btn small ghost" id="dprev"'+(idx===0?" disabled":"")+'>&larr; Previous</button><button class="btn small ghost" id="dnext"'+(idx>=n-1?" disabled":"")+'>Next &rarr;</button>'+(idx!==pi&&pi<n?'<button class="btn small" id="dtoday">Go to my day</button>':"")+'</div></div>';
   var hasT=p.theory&&p.theory.length, hasV=p.videos&&p.videos.length, nn=1;
   if(hasV){ h+='<div class="card"><h3>'+(nn++)+'. Watch</h3>'+p.videos.map(function(v){ return '<div class="item" style="cursor:default"><span>'+esc(v[0])+'</span><span class="muted">'+v[1]+' min</span></div>'; }).join("")+'<div class="muted" style="margin-top:6px">About '+Math.round(p.videos.reduce(function(a,v){ return a+v[1]; },0)/1.5)+' min at 1.5x.</div></div>'; }
-  if(hasT){ h+='<div class="card"><h3>'+(nn++)+'. Read the notes</h3><div class="row">'+p.theory.map(guideLink).join("")+'</div></div>'; }
+  if(hasT){ h+='<div class="card"><h3>'+(nn++)+'. Read the notes</h3><div class="row">'+guideLinks(p.theory)+'</div></div>'; }
   if(items.length){
     h+='<div class="card"><h3>'+nn+'. Practice session</h3><div class="muted">'+esc(describe(items))+' &middot; about '+Math.max(10,Math.round(items.length*1.2))+' min. Spaced repeats come first, then new material, then a drill and a scenario.</div><button class="btn primary block" id="startToday" style="margin-top:10px">Start today\'s practice</button></div>';
   } else if(p.tasks){
