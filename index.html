@@ -95,7 +95,8 @@ function ivText(b){ var d=IV[b]; return d===0?"today":(d===1?"tomorrow":"in "+d+
 
 // ---------- state, storage, sync
 var KEY = D.KEY||"cca1", CSP = D.CSP||"k_", tg = (window.Telegram&&window.Telegram.WebApp)||null, CS = (tg&&tg.initData&&tg.CloudStorage)?tg.CloudStorage:null;
-function blank(){ return {v:2,q:{},c:{},d:{},s:{},log:{},rec:[],exams:[],conf:1,ses:0}; }
+function blank(){ return {v:2,q:{},c:{},d:{},s:{},log:{},rec:[],exams:[],conf:1,dd:{}}; }
+function migrateDays(st){ st.dd=st.dd||{}; if(st.ses){ for(var i=0;i<st.ses;i++) if(st.dd[i]===undefined) st.dd[i]=1; st.ses=0; } return st; }
 var S = load();
 function load(){
   var st=blank();
@@ -103,7 +104,7 @@ function load(){
     var old=JSON.parse(null||"null");
     if(old&&old.answered){ Object.keys(old.answered).forEach(function(k){ var ok=!!(old.correct||{})[k]; st.q[k]={b:ok?2:0,d:today()+(ok?3:0),r:ok?1:0,w:ok?0:1,t:1}; }); }
   } }catch(e){}
-  return st;
+  return migrateDays(st);
 }
 var saveTimer=null;
 function save(){ clearTimeout(saveTimer); saveTimer=setTimeout(flush,350); }
@@ -133,7 +134,9 @@ function mergeInto(a,b){
   Object.keys(b.log||{}).forEach(function(k){ var x=a.log[k], y=b.log[k]; if(!x){ a.log[k]=y; } else { Object.keys(y).forEach(function(f){ x[f]=Math.max(x[f]||0,y[f]||0); }); } });
   var seen={}; a.exams.forEach(function(e){ seen[e.t]=1; }); (b.exams||[]).forEach(function(e){ if(!seen[e.t]) a.exams.push(e); });
   if((b.rec||[]).length>a.rec.length) a.rec=b.rec;
-  a.ses=Math.max(a.ses||0,b.ses||0); a.back=Math.max(a.back||0,b.back||0); a.rep=Math.max(a.rep||0,b.rep||0);
+  migrateDays(a); migrateDays(b);
+  Object.keys(b.dd||{}).forEach(function(k){ var x=a.dd[k], y=b.dd[k]; if(x===undefined||Math.abs(y)>Math.abs(x)) a.dd[k]=y; });
+  a.back=Math.max(a.back||0,b.back||0); a.rep=Math.max(a.rep||0,b.rep||0); a.repd=Math.max(a.repd||0,b.repd||0);
 }
 
 // ---------- spaced repetition
@@ -195,21 +198,24 @@ function mascotState(){
   if(g===null) return "hello";
   return ["calm","nervous","playing_dead","dead_homeless"][Math.max(0,Math.min(3,g-1))];
 }
+function botNote(){ return S.bt==="d"?'<div class="muted" style="margin-top:6px">Carl knows this course is finished and stays quiet. /resume in the chat brings reminders back.</div>':(S.bt==="p"?'<div class="muted" style="margin-top:6px">Carl is asleep for this course. Mark a day or send /resume in the chat to wake him.</div>':""); }
 function canReport(){ return !!(tg&&tg.initData&&tg.sendData&&tg.initDataUnsafe&&!tg.initDataUnsafe.query_id); }
 function reportToBot(){
-  try{ S.rep=today(); flush(); tg.sendData(JSON.stringify({t:"act",track:D.TRACK||"claude",streak:streak(),days:Math.min(S.ses||0,D.PLAN.length),total:D.PLAN.length})); }
+  try{ S.rep=today(); S.repd=daysDone(); flush(); tg.sendData(JSON.stringify({t:"act",track:D.TRACK||"claude",streak:streak(),days:daysDone(),total:D.PLAN.length,tz:Math.round(-new Date().getTimezoneOffset()/60)})); }
   catch(e){ toast("Open the app with the \ud83c\udf19 button at the bottom of the chat to tell Carl."); }
 }
 function mascotHtml(){
   var k=mascotState(), m=MASCOT[k], st=streak(), act=!!S.log[String(today())];
-  var btn=(act&&canReport()&&S.rep!==today())?'<button class="btn small" id="tellop" style="margin-top:8px">Tell Carl in the chat (closes the app)</button>':"";
-  return '<div class="card mascot"><img src="opossum/'+m[0]+'" alt="Cardboard Carl" onerror="this.style.display=\'none\'"><div><div class="eyebrow">Cardboard Carl'+(st?' &middot; streak '+st:'')+'</div><div class="say">'+esc(m[1])+'</div>'+btn+'</div></div>';
+  var btn=(act&&canReport()&&(S.rep!==today()||(S.repd||0)!==daysDone()))?'<button class="btn small" id="tellop" style="margin-top:8px">Tell Carl in the chat (closes the app)</button>':"";
+  return '<div class="card mascot"><img src="opossum/'+m[0]+'" alt="Cardboard Carl" onerror="this.style.display=\'none\'"><div><div class="eyebrow">Cardboard Carl'+(st?' &middot; streak '+st:'')+'</div><div class="say">'+esc(m[1])+'</div>'+botNote()+btn+'</div></div>';
 }
 function chipStreak(){ var s=streak(); $("#streak").innerHTML="streak <b>"+s+"</b>"; }
 document.getElementById("nav").addEventListener("click",function(e){ var b=e.target.closest("button"); if(b) go(b.dataset.tab); });
 
 // ---------- plan / today
-function planIndex(){ return Math.min(S.ses||0,D.PLAN.length); }
+function dayDone(i){ return (S.dd&&S.dd[i]>0)||false; }
+function daysDone(){ var n=0; for(var i=0;i<D.PLAN.length;i++) if(dayDone(i)) n++; return n; }
+function planIndex(){ for(var i=0;i<D.PLAN.length;i++) if(!dayDone(i)) return i; return D.PLAN.length; }
 function sessionFor(idx){
   var p=D.PLAN[idx], items=[], inT=function(x){ return p.quiz.indexOf(x.t)>-1; };
   if(p.quiz.length){
@@ -258,7 +264,7 @@ function renderHome(){
   var idx=viewDay, p=D.PLAN[idx];
   var items=sessionFor(idx), rd=readiness(), dq=dueQ().length, dc=dueC().length;
   var h=mascotHtml()+'<div class="card"><div class="eyebrow">'+n+'-day plan</div>';
-  h+='<h2>Day '+(idx+1)+' of '+n+(idx<pi?' &middot; done':'')+'</h2><div class="muted">'+esc(p.title)+'</div><div class="bar" style="margin-top:8px"><i style="width:'+Math.round(100*Math.min(pi,n)/n)+'%"></i></div><div class="muted" style="margin-top:4px">'+Math.min(pi,n)+' of '+n+' days done. No dates: take it at your own pace.</div>';
+  h+='<h2>Day '+(idx+1)+' of '+n+(dayDone(idx)?' &middot; done':'')+'</h2><div class="muted">'+esc(p.title)+'</div><div class="bar" style="margin-top:8px"><i style="width:'+Math.round(100*daysDone()/n)+'%"></i></div><div class="muted" style="margin-top:4px">'+daysDone()+' of '+n+' days done. No dates: take it at your own pace.</div>';
   h+='<div class="row" style="margin-top:10px"><button class="btn small ghost" id="dprev"'+(idx===0?" disabled":"")+'>&larr; Previous</button><button class="btn small ghost" id="dnext"'+(idx>=n-1?" disabled":"")+'>Next &rarr;</button>'+(idx!==pi&&pi<n?'<button class="btn small" id="dtoday">Go to my day</button>':"")+'</div></div>';
   var hasT=p.theory&&p.theory.length, hasV=p.videos&&p.videos.length, nn=1;
   if(hasV){ h+='<div class="card"><h3>'+(nn++)+'. Watch</h3>'+p.videos.map(function(v){ return '<div class="item" style="cursor:default"><span>'+esc(v[0])+'</span><span class="muted">'+v[1]+' min</span></div>'; }).join("")+'<div class="muted" style="margin-top:6px">About '+Math.round(p.videos.reduce(function(a,v){ return a+v[1]; },0)/1.5)+' min at 1.5x.</div></div>'; }
@@ -269,7 +275,7 @@ function renderHome(){
   } else if(p.tasks){
     h+='<div class="card"><h3>What to do</h3><div>'+esc(p.tasks)+'</div><div class="row" style="margin-top:10px">'+(p.act==="exam"?'<button class="btn primary grow" data-act="exam">Start the exam</button>':"")+(p.act==="weak"?'<button class="btn primary grow" data-act="weak">Drill weak topics</button>':"")+'<button class="btn grow" data-act="review">Review due ('+dq+')</button><button class="btn grow" data-act="mistakes">Mistake notebook ('+mistakes().length+')</button></div></div>';
   }
-  if(idx===pi&&pi<n) h+='<button class="btn block" id="sesdone" style="margin-bottom:12px">Mark this day as done</button>';
+  h+=dayDone(idx)?'<button class="btn block ghost" id="sesundo" style="margin-bottom:12px">Undo: this day is not done</button>':'<button class="btn block" id="sesdone" style="margin-bottom:12px">Mark this day as done</button>';
   h+='<div class="grid3"><div class="stat"><b>'+dq+'</b><span>Questions due</span></div><div class="stat"><b>'+dc+'</b><span>Cards due</span></div><div class="stat"><b>'+(rd===null?"-":rd+"%")+'</b><span>Recent accuracy</span></div></div>';
   h+='<div class="card" style="margin-top:12px"><h3>Quick actions</h3><div class="row"><button class="btn grow" data-act="review">Review due</button><button class="btn grow" data-act="mistakes">Mistakes</button><button class="btn grow" data-act="weak">Weak topics</button><button class="btn grow" data-act="exam">Exam</button></div></div>';
   if(!D.GM) h+='<div class="card"><h3>Study notes</h3><div class="muted">Diagrams, comparison tables, limits and exam traps by topic.</div><a class="btn block" href="guide.html" style="margin-top:8px;text-align:center;text-decoration:none">Open the guide</a></div>';
@@ -280,7 +286,8 @@ function renderHome(){
   if((b=$("#dnext"))) b.onclick=function(){ viewDay++; renderHome(); };
   if((b=$("#dtoday"))) b.onclick=function(){ viewDay=Math.max(0,Math.min(pi,n-1)); renderHome(); };
   if((b=$("#startToday"))) b.onclick=function(){ startRun("Day "+(idx+1),items); };
-  if((b=$("#sesdone"))) b.onclick=function(){ S.ses=Math.max(S.ses||0,idx+1); save(); viewDay=Math.min(idx+1,n-1); toast("Day marked as done"); renderHome(); };
+  if((b=$("#sesdone"))) b.onclick=function(){ S.dd=S.dd||{}; S.dd[idx]=Date.now(); logAct("p",true); save(); viewDay=Math.min(planIndex(),n-1); toast(canReport()?"Day marked. Tap 'Tell Carl' so the chat knows.":"Day marked as done"); renderHome(); };
+  if((b=$("#sesundo"))) b.onclick=function(){ S.dd=S.dd||{}; S.dd[idx]=-Date.now(); save(); toast("Day unmarked"); renderHome(); };
   main.querySelectorAll("[data-act]").forEach(function(x){ x.onclick=function(){ action(x.dataset.act); }; });
 }
 function action(a){
@@ -493,7 +500,7 @@ function themeMode(){ try{ var t=localStorage.getItem("cca_theme"); return t==="
 function setTheme(m){ try{ if(m==="auto"){ localStorage.removeItem("cca_theme"); document.documentElement.removeAttribute("data-theme"); } else { localStorage.setItem("cca_theme",m); document.documentElement.setAttribute("data-theme",m); } }catch(e){} }
 function renderProgress(){
   title("Progress"); chipStreak();
-  var rd=readiness(), t=today(), h='<div class="card"><h2>Readiness</h2><div class="grid3" style="margin-top:8px"><div class="stat"><b>'+(rd===null?"-":rd+"%")+'</b><span>Recent accuracy</span></div><div class="stat"><b>'+streak()+'</b><span>Day streak</span></div><div class="stat"><b>'+Math.min(S.ses||0,D.PLAN.length)+'/'+D.PLAN.length+'</b><span>Plan days done</span></div></div><div class="muted" style="margin-top:8px">'+(rd===null?"Answer at least 10 questions to see this.":(rd>=80?"You are in good shape. Keep reviewing to hold it.":(rd>=D.EXAM.pass?"Close to the pass mark. Focus on weak topics.":"Below the pass mark. Use Mistakes and Weak topics every day.")))+'</div></div>';
+  var rd=readiness(), t=today(), h='<div class="card"><h2>Readiness</h2><div class="grid3" style="margin-top:8px"><div class="stat"><b>'+(rd===null?"-":rd+"%")+'</b><span>Recent accuracy</span></div><div class="stat"><b>'+streak()+'</b><span>Day streak</span></div><div class="stat"><b>'+daysDone()+'/'+D.PLAN.length+'</b><span>Plan days done</span></div></div><div class="muted" style="margin-top:8px">'+(rd===null?"Answer at least 10 questions to see this.":(rd>=80?"You are in good shape. Keep reviewing to hold it.":(rd>=D.EXAM.pass?"Close to the pass mark. Focus on weak topics.":"Below the pass mark. Use Mistakes and Weak topics every day.")))+'</div></div>';
   h+='<div class="card"><h3>Mastery by domain</h3>'+Object.keys(D.DOMAINS).map(function(k){ var n=QB.filter(function(q){ return q.d===k; }), seen=n.filter(function(q){ return S.q[q.id]; }).length, learned=n.filter(function(q){ return S.q[q.id]&&S.q[q.id].b>=3; }).length; return '<div class="domrow"><span>'+esc(D.DOMAINS[k].s)+'</span><div class="bar"><i style="width:'+Math.round(100*learned/n.length)+'%"></i></div><span>'+learned+'/'+n.length+'</span></div><div class="muted" style="margin:-4px 0 4px">'+seen+' seen</div>'; }).join("")+'<div class="muted">Mastered = repeated correctly at least three times in a row.</div></div>';
   var last=[]; for(var i=13;i>=0;i--){ var l=S.log[String(t-i)]; last.push((l?(l.q||0)+(l.c||0)+(l.d||0)+(l.s||0):0)); } var mx=Math.max.apply(null,last.concat([1]));
   h+='<div class="card"><h3>Last 14 days</h3><div class="hist">'+last.map(function(v){ return '<i style="height:'+Math.round(100*v/mx)+'%" title="'+v+'"></i>'; }).join("")+'</div></div>';
@@ -514,10 +521,21 @@ function renderProgress(){
 
 // ---------- boot
 if(tg){ try{ tg.ready(); tg.expand(); }catch(e){} }
+function applyBotState(){
+  function q(k){ var r=location.search.match(new RegExp("[?&]"+k+"=([^&]*)")); return r?decodeURIComponent(r[1]):null; }
+  var bl=q("bl"), bs=parseInt(q("bs"),10), bt=q("bt"), ch=false, t=today();
+  if(bl&&/^\d{4}-\d{2}-\d{2}$/.test(bl)){
+    var p=bl.split("-"), dn=Math.floor(Date.UTC(+p[0],+p[1]-1,+p[2])/DAY), n=(bs>0&&bs<1000)?bs:1;
+    if(dn<=t+1) for(var i=0;i<n;i++){ var k=String(dn-i); if(!S.log[k]){ S.log[k]={q:0,ok:0,c:0,d:0,s:0,bot:1}; ch=true; } }
+  }
+  if(bt!==null){ var v=(bt==="d"||bt==="p")?bt:""; if(S.bt!==v){ S.bt=v; ch=true; } }
+  if(ch) save();
+}
+applyBotState();
 if(CS){ cloudLoad(function(c){ if(!c) return; mergeInto(S,c); try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){} if(tab==="home"&&!run&&!E) renderHome(); chipStreak(); }); }
 window.addEventListener("beforeunload",function(){ try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){} });
-window.__dva={S:function(){ return S; },QBY:QBY};
+window.__dva={S:function(){ return S; },QBY:QBY,merge:mergeInto,dayDone:dayDone};
 go("home");
 })();
-</script><script>(function(){var BUILD="1794503103",B=BUILD;try{fetch(location.pathname+"?nc="+Date.now(),{cache:"no-store"}).then(function(r){return r.text();}).then(function(t){var m=t.match(/var BUILD="(\d+)"/);if(m&&m[1]!==B&&location.search.indexOf("b="+m[1])<0){var q=location.search.replace(/^\?/,"").replace(/(^|&)b=\d+/,"").replace(/^&/,"");location.replace(location.pathname+"?"+(q?q+"&":"")+"b="+m[1]+location.hash);}}).catch(function(){});}catch(e){}})();</script>
+</script><script>(function(){var BUILD="1795367829",B=BUILD;try{fetch(location.pathname+"?nc="+Date.now(),{cache:"no-store"}).then(function(r){return r.text();}).then(function(t){var m=t.match(/var BUILD="(\d+)"/);if(m&&m[1]!==B&&location.search.indexOf("b="+m[1])<0){var q=location.search.replace(/^\?/,"").replace(/(^|&)b=\d+/,"").replace(/^&/,"");location.replace(location.pathname+"?"+(q?q+"&":"")+"b="+m[1]+location.hash);}}).catch(function(){});}catch(e){}})();</script>
 </body></html>
