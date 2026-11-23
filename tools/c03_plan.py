@@ -14,11 +14,13 @@ CF = "https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/"
 EXAM_GUIDE = "https://docs.aws.amazon.com/aws-certification/latest/developer-associate-03/developer-associate-03.html"
 
 
-def day(title, videos=(), theory=(), quiz=(), target=40, tasks="", act="", read=()):
+def day(title, videos=(), theory=(), quiz=(), target=40, tasks="", act="", read=(), mock=""):
     p = {"title": title, "videos": [list(v) for v in videos], "theory": list(theory), "quiz": list(quiz),
          "target": target, "tasks": tasks, "act": act}
     if read:
         p["read"] = [list(r) for r in read]
+    if mock:
+        p["mock"] = mock
     return p
 
 
@@ -75,9 +77,9 @@ PLAN = [
     day("CI/CD and deployment strategies (task 3.3): CodeBuild, CodeDeploy, CodePipeline, Elastic Beanstalk",
         [("AWS CICD", 91), ("Elastic Beanstalk", 59)],
         ["cicd", "beanstalk", "patterns"], ["cicd", "beanstalk"], 40),
-    day("Checkpoint 2: first full exam simulator",
-        theory=["exam"], tasks="In the app: Practice → Exam simulator (65 questions, 130 minutes, no pauses). Then go through every mistake in the Mistake notebook (Progress tab) and read the notes for each weak topic.",
-        act="exam", target=0),
+    day("Checkpoint 2: first mock exam",
+        theory=["exam"], tasks="Mock 1: 65 questions, 130 minutes, no pauses. Then go through every mistake in the Mistake notebook (Progress tab) and read the notes for each weak topic.",
+        act="exam", target=0, mock="m1"),
     day("Troubleshooting and observability (domain 4 is 22% in C03): CloudWatch, X-Ray, CloudTrail",
         [("CloudWatch, X-Ray, CloudTrail", 108)],
         ["monitoring", "troubleshoot"], ["monitoring"], 45),
@@ -87,15 +89,15 @@ PLAN = [
         [("VPC Fundamentals", 25), ("Route 53 (watch at 2x or only read the theory)", 82)],
         ["vpc", "r53", "limits"], ["vpc", "r53"], 35),
     day("Weak topics and the mistake notebook",
-        theory=["limits"], tasks="Practice → Weak topics until the weakest topics are above 80%. Then Practice → Mistakes. Re-watch the two weakest course sections at 1.5x.",
+        theory=["limits"], tasks="Practice → Weak topics until the weakest topics are above 80%. Then Practice → Mistakes. Re-watch the two weakest course sections at 1.5x. If you still have energy, Practice → Mock exams has two more papers (Mock 3 and Mock 4) for an extra sitting.",
         act="weak", target=50),
     day("The course practice test, then review every wrong answer",
         [("Practice Test - AWS Certified Developer Associate (course)", 130)],
         tasks="Do the course practice test in one sitting. The course is still based on DVA-C02, so do not worry about questions on AI security or containers here. Review every wrong answer, then Practice → Mistakes in the app.",
         target=0),
-    day("Checkpoint 3: second full exam simulator",
-        theory=["exam"], tasks="Take a second full exam. Aim for 80% or more. Fix the gaps with Weak topics and the notes.",
-        act="exam", target=0,
+    day("Checkpoint 3: second mock exam",
+        theory=["exam"], tasks="Mock 2: aim for 80% or more. Fix the gaps with Weak topics and the notes.",
+        act="exam", target=0, mock="m2",
         read=[("Official DVA-C03 exam guide: read the tasks once more and tick off what you know", 20, EXAM_GUIDE)]),
     day("Final review, no new material",
         theory=["limits", "exam"], quiz=[], target=40,
